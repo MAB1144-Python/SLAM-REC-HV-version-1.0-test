@@ -1,9 +1,9 @@
 # SLAM-REC-HV-version-1.0-test
-REC-HV version 1.0 test, dynamic object detection in SLAM with ROS
+
 
 ![GitHub Brillante](https://github.com/MAB1144-Python/Document/blob/main/portada_Mesa%20de%20trabajo%201.jpg)
 
-
+dynamic object detection in SLAM with ROS
 ### Scenario A detection test
 ### Scenario B detection test
 
