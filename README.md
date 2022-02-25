@@ -5,18 +5,25 @@
 
 dynamic object detection in SLAM with ROS
 ### Scenario A detection test
+
+[![Alt text](https://img.youtube.com/vi/WSVlEiB-iQM/0.jpg)](https://youtu.be/WSVlEiB-iQM)
+
 ### Scenario B detection test
 
-[![Alt text](https://img.youtube.com/vi/DVsn48c5U7o/0.jpg)](https://youtu.be/DVsn48c5U7o)
+[![Alt text](https://img.youtube.com/vi/bhjiSwBkPpA/0.jpg)](https://youtu.be/bhjiSwBkPpA)
 
 ### Scenario C detection test
 
-[![Alt text](https://img.youtube.com/vi/iwlpr-J6Dpw/0.jpg)](https://youtu.be/iwlpr-J6Dpw)
+[![Alt text](https://img.youtube.com/vi/ByWTqAcy7pA/0.jpg)](https://youtu.be/ByWTqAcy7pA)
 
 ### Scenario D detection test
 
-[![Alt text](https://img.youtube.com/vi/KAVWGECfQlM/0.jpg)](https://youtu.be/KAVWGECfQlM)
+[![Alt text](https://img.youtube.com/vi/s_6GpLxKSJA/0.jpg)](https://youtu.be/s_6GpLxKSJA)
 
 ### Scenario E detection test
 
+[![Alt text](https://img.youtube.com/vi/8NJJ-8n0R5I/0.jpg)](https://youtu.be/8NJJ-8n0R5I)
+
 ### Scenario F detection test
+
+[![Alt text](https://img.youtube.com/vi/bm_InupCFsA/0.jpg)](https://youtu.be/bm_InupCFsA)
