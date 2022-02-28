@@ -8,13 +8,15 @@
 #### In it, the videos of the execution of the system in various scenarios are presented, as well as links to the datasets and software to be able to execute them with visualization in RVIZ. the datasets contain rotation and translation log, full point cloud and reduced point cloud with application of rotation and translation.
 ### Scenario A detection test.
 
+#### The control scenario is made up of elements with materials that are easy to capture with the sensors. In the test, there was a robotic vehicle, which carried out the routes at a speed of 2.78m/s.
+
 [![Alt text](https://img.youtube.com/vi/WSVlEiB-iQM/0.jpg)](https://youtu.be/WSVlEiB-iQM)
 
-#### test dataset link.
+#### test dataset link 1.
 
 https://drive.google.com/file/d/1kIZeFtes6nw38msn9hPmzpdYuX5q9MrD/view?usp=sharing
 
-#### test dataset link.
+#### test dataset link 2.
 
 https://drive.google.com/file/d/1_bv6Oza35ynK-kPxmFh8rpoXYACJWE3h/view?usp=sharing
 
@@ -63,3 +65,6 @@ https://drive.google.com/file/d/1_Ui49soAT_sTSj1ABUqnC2PhgicTUkQm/view?usp=shari
 #### https://github.com/MAB1144-Python/rotation-and-traslate-Point-Cloud-3D
 #### https://github.com/MAB1144-Python/Machine-Learning-and-Deep-Learning
 
+##### contact
+##### https://www.linkedin.com/in/brayanandrumontenegroembus/
+##### bamontenegro@unicauca.edu.co
