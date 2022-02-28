@@ -43,3 +43,9 @@ https://drive.google.com/file/d/1_Ui49soAT_sTSj1ABUqnC2PhgicTUkQm/view?usp=shari
 ### Scenario F detection test
 
 [![Alt text](https://img.youtube.com/vi/bm_InupCFsA/0.jpg)](https://youtu.be/bm_InupCFsA)
+
+#### repositories of interest
+#### https://github.com/MAB1144-Python/Research-in-SLAM
+#### https://github.com/MAB1144-Python/rotation-and-traslate-Point-Cloud-3D
+#### https://github.com/MAB1144-Python/Machine-Learning-and-Deep-Learning
+
