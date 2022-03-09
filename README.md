@@ -3,9 +3,16 @@
 
 ![GitHub Brillante](https://github.com/MAB1144-Python/Document/blob/main/portada_Mesa%20de%20trabajo%201.jpg)
 
-#### In this repository, there is the compilation of the tests carried out with the REC-HV v1.0 software, with online execution for the detection of dynamic objects, this was executed in ubuntu 18.06, Python 3 and ROS, additionally it was included a visual odometry system with ORB-SLAM. a 2D LIDAR (RPLIDAR A1) and a kinect (v1.0) were used as instruments. and multiple Python libraries were used.
+#### In this repository is the compilation of the tests carried out with the REC-HV v1.0 software, with online execution and low implementation cost, for the reconstruction of static scenes by points of high variability. In this, a dynamic object that performs a tour in the scene is detected, segmented and eliminated.
 
-#### In it, the videos of the execution of the system in various scenarios are presented, as well as links to the datasets and software to be able to execute them with visualization in RVIZ. the datasets contain rotation and translation log, full point cloud and reduced point cloud with application of rotation and translation.
+#### Rec-HV was developed in Python 3 and ROS with execution in ubuntu 18.06, it incorporates different tools, including ORB-SLAM, which is a visual odometry system. A 2D LIDAR (RPLIDAR A1) and a kinect (v1.0) were used as instruments. 
+
+### To show in depth the behavior of the software, a compilation of videos of the execution of the system in various scenarios is presented, and datasets of each scenario, software and different user guides are made available to the community of SLAM researchers. repository will be built by receiving contributions, opinions and new research on this area.
+
+### The datasets are composed of point clouds, lidar data sets, the position vector and the Euler angles for 400 recorded cycles.
+
+### To encourage the staggered development of this technology, researchers are encouraged to leave their opinions, doubts and contributions, in order to create spaces for the appropriation of this technology and strengthen SLAM research.
+
 ### Scenario A detection test.
 
 #### The control scenario is made up of elements with materials that are easy to capture with the sensors. In the test, there was a robotic vehicle, which carried out the routes at a speed of 2.78m/s.
