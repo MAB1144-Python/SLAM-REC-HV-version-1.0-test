@@ -1,0 +1,5 @@
+<launch>
+    <!-- My Package launch file -->
+    <node pkg="rdslam" type="nodo_segmentation" name="nodo_segmentation" output="screen">
+    </node>
+</launch>

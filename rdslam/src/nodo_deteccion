@@ -1,0 +1,344 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import roslib
+import rospy
+import math
+import cv2
+import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
+import time
+import os
+import guardar_info as gdi
+import evaluacion_pre as eva
+import regresion_ia as reg
+import statistics
+import ros_numpy
+import open3d as o3d
+import struct
+import pandas as pd
+import seaborn as sb
+from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import PointCloud2, PointField
+from std_msgs.msg import Float32MultiArray
+from math import pi
+from datetime import datetime
+from email.header import Header
+from sensor_msgs import point_cloud2 as pc
+from open3d.open3d.geometry import voxel_down_sample,estimate_normals
+
+ang=45#angulo de apertura la mitad del kinect 
+tprom = 3#tamaño del promedio movil 
+pm=0#varible que corre la posición donde se guarda el dato nuevo en los vectores donde se aplica el promedio movi
+#matrices para el promedio movil
+datos_lidar=np.zeros(((ang*2), 2),dtype=float)
+vecr = np.zeros(((ang*2), tprom),dtype=float)
+param_tras = np.zeros(((2), tprom),dtype=float)
+verif = 0
+conteo  = 0
+tiempo_inicial = 0
+xt = 0
+yt = 0
+zt = 0
+xo = 0
+yo = 0
+zo = 0
+inic_msg = []
+inic_sec = False
+inic_tot = False
+zona = [0,0,0,0]
+vx_m = 0.08
+thres = 0.4
+xeje = 400
+yeje = 500
+data_orb = [0,0,0,0,0,0]
+
+class PRE_PROCESAMIENTO(object):  
+
+  def __init__(self):#función inicial cada vez que corre el sistema y se ncarga de tomar los mensajes que vienen desde los sensores 
+     self.pub_est = rospy.Publisher("/point_cloud_reduced", PointCloud2, queue_size=4)
+     self.sub = rospy.Subscriber('/scan', LaserScan, self.Calculos)#se subscribe a msg de tipo laserScan del nodo lidar en la dirrección /scan
+     
+  def odometryCb(self, msg):
+    global data_orb
+    global inic_sec
+    inic_sec = True
+    data_orb = list(msg.data)
+         
+  def ptcloud2(self, msg):
+     global inic_msg
+     global inic_sec
+     global inic_tot
+     inic_sec = True
+     inic_tot = True
+     inic_msg = msg    
+     
+  def Calculos(self, msg):
+    global inic_sec
+    global inic_tot
+    global data_orb
+    inic_sec = True  
+    cont_kn = 1 
+    while inic_sec:
+        inic_sec = False
+        self.sub_kin = rospy.Subscriber("/camera/depth_registered/points" , PointCloud2, self.ptcloud2)
+    inic_sec = True 
+    while inic_sec:
+      inic_sec = False
+      rospy.Subscriber("/mpu_orb", Float32MultiArray,self.odometryCb)
+    self.angle_min = msg.angle_min#ángulo donde se inicia el registro de datos dato tipo flotan en radianes como unidades (angulo -pi tener encuenta el corrimiento)
+    self.angle_increment = msg.angle_increment#incremento del ángulo unidades radianes 
+    self.ranges = msg.ranges# vector de profundidad de las distancias en metros 360 datos ua por cada grado
+    if inic_tot:
+     global inic_msg
+     global ang
+     global pm
+     global datos
+     global conteo
+     global tiempo_inicial
+     global zona
+     global vx_m
+     global thres
+     
+     t_est_ini = time.time() 
+     '''construcción del vector distancia con los datos del lidar '''
+     datos_ld2 = self.vector_distancia()
+     #print("conteo ",conteo)
+     conteo += 1
+     #gdi.guardar_puntos_lidar( datos_ld2,int(conteo),"orig")
+     
+     '''interpolacion reconstruye las partes de inf'''
+     datos_ld_cl = eva.interpolacion(datos_ld2)
+     #gdi.guardar_puntos_lidar( datos_ld_cl,int(conteo),"inter")
+     datos_ld_tr = self.marco_refe(datos_ld_cl)
+     
+     '''promedio movil'''
+     datos_pro = self.promedio_movil(datos_ld_tr,self.angle_min, self.angle_increment)
+     self.act_pm()#contador promedio movil actualiza la posición donde se guarda e lnuevo dato
+     
+     ''' deteccion de objeto dinámico '''
+     zona = reg.deteccion_dinamico(datos_pro,conteo,None,zona, thres)
+     '''segmentación de pointcloud''' 
+     m_xyz = 0
+     m_xyz1 = 0 
+     m_din = 0
+     m_est = 0
+     t_rec = 0
+     pos_xyz = [0,0,0]
+     evento = "estatico"
+     #zona = [60,30,3,3]
+     ang_max = self.angle_min+ ((90-zona[1]+zona[3])*self.angle_increment) #(math.pi)/2.2#
+     ang_min = self.angle_min+ ((90-zona[0]-zona[3])*self.angle_increment) #(math.pi)/2.5#
+     point_data = [[ang_max,ang_min, vx_m],  [data_orb[0],data_orb[1],data_orb[2]],  [data_orb[3],data_orb[4],data_orb[5]]]
+     t_est = time.time()-t_est_ini
+     if True:  
+        negativo_xyz = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(inic_msg) 
+        size_pcl_in = len(negativo_xyz)
+        negativo_xyz[:,[1,2,0]] = negativo_xyz[:,[0,1,2]]
+        negativo_xyz[:,1] = -negativo_xyz[:,1]
+        negativo_xyz[:,2] = -negativo_xyz[:,2]
+        m_xyz = len(negativo_xyz)
+        t_est = time.time()-t_est_ini 
+        
+        '''reduccion de nube''' 
+        t_vx_ini = time.time()
+        out_pcd = o3d.geometry.PointCloud()    
+        out_pcd.points = o3d.utility.Vector3dVector(negativo_xyz)
+        pcd_down = voxel_down_sample(out_pcd, voxel_size=vx_m)#reduccion out_pcd#
+        negativo_xyz = np.asarray(pcd_down.points) 
+        size_redu = len(negativo_xyz)
+        t_vx = time.time()-t_vx_ini
+        #print("********tamaño pcl 1",len(negativo_xyz))
+        
+        '''proyeccion pcl'''
+        t_pc2_ini = time.time()
+        negativo_xyz = np.concatenate(( negativo_xyz, point_data), axis=0)
+        print("********tamaño pcl client",len(negativo_xyz))
+        pc_est = self.procesamiento_depth(negativo_xyz)
+        self.pub_est.publish(pc_est)
+        t_pc2 = time.time() - t_pc2_ini
+        
+        '''guardar'''
+        t_gp_ini = time.time()
+        if False: 
+                m_est = len(negativo_xyz)
+                pcd = o3d.geometry.PointCloud()
+                pcd.points =  o3d.utility.Vector3dVector(negativo_xyz)
+                pcd.paint_uniform_color([0, 0.651, 0.929]) # blue
+                o3d.io.write_point_cloud("/home/mab/datos_pcl/datos/cloud/cloud_total_"+str(conteo)+".ply",pcd)
+        t_gp = 0#time.time() - t_pc2_ini
+                   
+     
+     '''timer'''
+     #print(pos_xyz)
+     tiempo_final = time.time()
+     resta_time = tiempo_final-tiempo_inicial
+     pos=""
+     for dat in [ resta_time, t_est, t_vx, t_pc2, t_gp, vx_m, zona[0], zona[1], zona[2], zona[3], data_orb[0],data_orb[1],data_orb[2], data_orb[3],data_orb[4],data_orb[5], size_pcl_in, size_redu]:
+        pos = pos+str(dat)+" "
+     gdi.guardar_tiempos_client(pos,conteo)
+     tiempo_inicial = tiempo_final 
+     t = datetime.now()
+     hour = str(t.minute)+str(':')+str(t.second)+str(':')+str(t.microsecond)
+     print('+++hour cliente :', hour,conteo,zona)
+        
+  ''' funciones de la class'''    
+       
+  def movimiento(self, y,z,x):
+     p = [[y],[z],[x]]
+     global xt
+     global yt
+     global zt
+     global xo
+     global yo
+     global zo
+     mz = [[np.cos(zo),-np.sin(zo),0],
+           [np.sin(zo), np.cos(zo),0],
+           [         0,          0,1]]
+           
+     mx = [[ np.cos(yo),0,np.sin(yo)],
+           [          0,1,         0],
+           [-np.sin(yo),0, np.cos(yo)]]
+           
+     my = [[1,          0,          0],
+           [0, np.cos(xo),-np.sin(xo)],
+           [0, np.sin(xo), np.cos(xo)]]
+     p = np.dot(mz,p)  
+     p = np.dot(my,p)    
+     p = np.dot(mx,p)            
+     x = p[0]+xt
+     y = p[1]+yt
+     z = p[2]+zt
+     return(x,y,z)
+         
+  def procesamiento_depth(self, pcl_total):
+     points = []
+     for i in range(len(pcl_total)):
+            x = pcl_total[i][0]
+            y = pcl_total[i][1]
+            z = pcl_total[i][2]
+            r = 0#int(pcl_total_rgb[i][0])#int(x * 255.0)
+            g = 0#int(pcl_total_rgb[i][1])#int(y * 255.0)
+            b = 255#int(pcl_total_rgb[i][2])#int(z * 255.0)
+            a = 255
+            rgb = struct.unpack('I', struct.pack('BBBB', r, g, b, a))[0]
+            #print hex(rgb)
+            pt = [x, y, z, rgb]
+            points.append(pt)
+     fields = [PointField('x', 0, PointField.FLOAT32, 1),
+          PointField('y', 4, PointField.FLOAT32, 1),
+          PointField('z', 8, PointField.FLOAT32, 1),
+          #PointField('rgb', 12, PointField.UINT32, 1),
+          PointField('rgba', 12, PointField.UINT32, 1),
+          ]
+     header = Header()
+     header.frame_id = "map"
+     pc2 = pc.create_cloud(header, fields, points)
+     pc2.header.stamp = rospy.Time.now()
+     return(pc2)   
+
+       
+  #filtropromedio movil
+  def promedio_movil(self,r_date,angulo_inicial, angulo_incremento):#i,r,alf,corre):asigna los datos en la matriz y determina el promedio movil de los datos
+     global pm
+     global vecr
+     global tprom
+     datos_pro = []
+     for i in range(len(r_date)):
+        vecr[i][pm]=r_date[i][0]#cuando el r es menor a la profundidad se realiza la triangulación y se guarda en una posición
+        vect_pr=vecr[i,:].sum() /tprom
+        #datos_pro.append([vect_pr,r_date[i][1]])#se determina el promedio y se envía
+        alfa = angulo_inicial+ (i*angulo_incremento)
+        datos_pro.append([vect_pr,statistics.stdev(vecr[i,:]),alfa])
+     return(datos_pro)
+
+  def vector_distancia(self):
+     global cont
+	#genelos primeros 29 grado
+     other = 90+ang# 360-ang#variable que permite ubicar el segundo set de datos a partir de la misma amplitud de 29 grados
+     #print("incremento",self.angle_increment)
+     datos_ld = []
+     for i in range(ang*2):
+       r,alfa = self.profundidad(i, other)#realiza el preprocesamiento de los datos y la triangulación determina la desviación
+       datos_ld.append([ r,alfa])
+     self.angle_min =datos_ld[0][1]
+     return(datos_ld)
+     #print(datos_lidar)
+
+  def profundidad(self,i,other):#lectura profundidad
+    rot = 90#rota los datos para generar una vista frontal
+    tet = other+i+rot#ángulo total donde se tiene encuenta todas las variaciones en el ángulo la i(1->ang) other primeros o ultimos y rot que es el giro
+    alfa = self.angle_min + (self.angle_increment * (tet))#es el ángulo en radianes correspondiente a una profundidad
+    r = self.ranges[other+i]#es la profundidad de un punto sensado por el LIDAR
+    return(r,alfa)
+
+#actualización contadores
+  def act_pm(self):#da la posición donde se guardara un dato del promedio movil
+     global pm
+     global tprom
+     if pm < (tprom-1):
+       pm = pm + 1#limita el valor de dm a el numero de datos del promedio 
+     else:
+       pm = 0      
+     
+  def marco_refe(self, datos):
+       global xt
+       global yt
+       datos_ld = []
+       for i in range(int (ang*2)):
+         r = datos[i][0]
+         alf = datos[i][1]
+         datos_ld.append( self.traslacion( r, alf, xt, yt))#self.xt, self.yt)
+       param_tras [0][pm]= xt
+       param_tras [1][pm]= yt
+       return(datos_ld)   
+
+          
+  def traslacion(self, ri, alfi, xt, yt):#determina el X y Y dependiendo del radio y ángulo
+       y=(((math.sin(alfi))*ri))
+       x=(((math.cos(alfi))*ri))
+       x=float(x)+float(xt)
+       y=float(y)+float(yt)
+       #print(x,y)
+       r=np.sqrt((x**2)+(y**2))
+       alf=math.atan(y/x)
+       if alf < 0:
+          alf = np.pi+alf 
+       #print(ri,alfi, r, alf)
+       return(r,alf) 
+
+#programa principal
+
+if __name__=='__main__':     
+    os.makedirs('/home/mab/datos_pcl/datos', exist_ok=True)
+    os.makedirs('/home/mab/datos_pcl/datos/lidar', exist_ok=True)
+    os.makedirs('/home/mab/datos_pcl/datos/zonas', exist_ok=True)
+    os.makedirs('/home/mab/datos_pcl/datos/deteccion', exist_ok=True)
+    os.makedirs('/home/mab/datos_pcl/datos/regresion1', exist_ok=True)
+    os.makedirs('/home/mab/datos_pcl/datos/regresion2', exist_ok=True)
+    os.makedirs('/home/mab/datos_pcl/datos/puntos', exist_ok=True)
+    os.makedirs('/home/mab/datos_pcl/datos/cloud', exist_ok=True)
+    direc = '/home/mab/datos_pcl/datos/max.txt'
+    if os.path.isfile(direc):
+       os.remove(direc)
+       enc = "max_desviación"
+       archi1=open(direc,"w")  
+       archi1.write(enc)   
+    rospy.init_node('nodo_deteccion')#crea el nodo 'pre_procesamiento' donde se ejecuta el codigo, y este queda anclado a rosmaster con este nombre 
+    instancia_pre_procesamiento = PRE_PROCESAMIENTO()#crea una instancia de la clase PRE_PROCESAMIENTO
+    rospy.loginfo("inicio de nodo_deteccion")#mensajen en ROS de inicio del nodo 
+    cv2.destroyAllWindows()
+    rospy.spin()#averiguar que es spin y como afecta 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

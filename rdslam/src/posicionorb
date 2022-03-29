@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import roslib
+import rospy
+import math
+import sys
+import cv2
+import numpy as np
+import os
+np.seterr(divide='ignore', invalid='ignore')
+from std_msgs.msg import Float32MultiArray
+from geometry_msgs.msg  import PoseStamped
+
+
+pm = 0
+x_orb = [0,0,0,0,0,0,0]
+tprom = 4#tamaño del promedio movil 
+vecx = np.zeros(( tprom),dtype=float)
+vecy = np.zeros(( tprom),dtype=float)
+vecz = np.zeros(( tprom),dtype=float)
+vecox = np.zeros(( tprom),dtype=float)
+vecoy = np.zeros(( tprom),dtype=float)
+vecoz = np.zeros(( tprom),dtype=float)
+
+class POSICION_XYZ(object):  
+
+  def __init__(self):#función inicial cada vez que corre el sistema y se ncarga de tomar los mensajes que vienen desde los sensores
+     self.pub_odo = rospy.Publisher("/mpu_orb", Float32MultiArray, queue_size=6)
+     rospy.Subscriber("orb_slam2_rgbd/pose", PoseStamped, self.odometrycb)
+    
+  def odometrycb(self, msg):
+   global x_orb
+   x = msg.pose.position.x
+   y = msg.pose.position.y
+   z = msg.pose.position.z
+   ox = msg.pose.orientation.x
+   oy = msg.pose.orientation.y
+   oz = msg.pose.orientation.z
+   #print(msg.pose.orientation)
+   xp, yp, zp,ox,oy,oz = promedio_movil(x,y,z,ox,oy,oz)
+   array = [float(xp),-float(yp),float(zp),float(ox),float(oy),float(oz)]
+   left_top = Float32MultiArray(data=array)
+   self.pub_odo.publish(left_top)
+
+
+def promedio_movil(x,y,z,ox,oy,oz):#asigna los datos en la matriz y determina el promedio movil de los datos
+     global pm
+     global vecx
+     global vecy
+     global vecz
+     global vecox
+     global vecoy
+     global vecoz
+     global tprom
+     vecx[pm] = x
+     vecy[pm] = y
+     vecz[pm] = z
+     vecox[pm] = ox
+     vecoy[pm] = oy
+     vecoz[pm] = oz
+     vect_p_x=vecx.sum() /tprom
+     vect_p_y=vecy.sum() /tprom
+     vect_p_z=vecz.sum() /tprom
+     vect_p_ox=vecox.sum() /tprom
+     vect_p_oy=vecoy.sum() /tprom
+     vect_p_oz=vecoz.sum() /tprom
+     act_pm()
+     return(vect_p_x,vect_p_y,vect_p_z,vect_p_ox,vect_p_oy,vect_p_oz)
+     
+def act_pm():#da la posición donde se guardara un dato del promedio movil
+     global pm
+     global tprom
+     if pm < (tprom-1):
+       pm = pm + 1#limita el valor de dm a el numero de datos del promedio 
+     else:
+       pm = 0      
+
+if __name__=='__main__':
+    os.makedirs('/home/mab/datos_pcl', exist_ok=True)
+    rospy.init_node('mpu_orb')#crea el nodo 'pre_procesamiento' donde se ejecuta el codigo, y este queda anclado a rosmaster con este nombre 
+    instancia_posicion = POSICION_XYZ()#crea una instancia de la clase PRE_PROCESAMIENTO
+    rospy.loginfo("inicio de nodo posicionamiento ORB-SLAM")#mensajen en ROS de inicio del nodo 
+    cv2.destroyAllWindows()
+    rospy.spin()#averiguar que es spin y como afecta 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

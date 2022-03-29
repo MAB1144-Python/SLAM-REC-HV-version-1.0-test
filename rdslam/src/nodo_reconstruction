@@ -1,0 +1,141 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import roslib
+import rospy
+import math
+import sys
+import cv2
+import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
+import matplotlib.pyplot as plt
+import cv_bridge
+import time
+import os
+import ros_numpy
+#from open3d import *
+#from open3d.open3d.geometry import voxel_down_sample,estimate_normals, TriangleMesh
+from sensor_msgs import point_cloud2 as pc
+from sensor_msgs.msg import PointCloud2, PointField
+import open3d as o3d
+import struct
+from email.header import Header
+import time
+import guardar_info as gdi
+#import pyvista as pv
+
+vx_m = 0.08
+xyz_point_ant = np.zeros((1,3), dtype=object)
+cont = 0
+tiempo_inicial = 0
+tope = 2
+xt = 0
+yt = 0
+zt = 0
+
+class RECONSTRUCCION(object):  
+
+  def __init__(self):#función inicial cada vez que corre el sistema y se ncarga de tomar los mensajes que vienen desde los sensores
+     self.pub_rec = rospy.Publisher("/point_cloud_reconstruccion_total", PointCloud2, queue_size=8)
+     self.sub_kin = rospy.Subscriber("/point_cloud_segmentacion" , PointCloud2, self.ptcloud2)
+          
+  def ptcloud2(self, msg):  
+     global xyz_point_ant
+     global cont
+     global tiempo_inicial
+     global tope
+     global xt
+     global yt
+     global zt
+     global size_xyz
+     global xeje
+     '''reconstrucción ''' 
+     '''preparacion de los datos'''
+     t_pre_ini = time.time() 
+     negativo_xyz = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg)
+     m_xyz_in = len(negativo_xyz)
+     t_pre = time.time() - t_pre_ini
+        
+     '''union de pcl'''
+     t_uni_ini = time.time()
+     size_ant = len(xyz_point_ant)
+     pcl_total = self.unir_pcd(xyz_point_ant , negativo_xyz, 0, 1)
+     size_uni = len(pcl_total)
+     print("+++++++union PCL rtwo ",size_uni)
+     t_uni = time.time() - t_uni_ini
+        
+     '''reduccion'''
+     t_vx_ini = time.time() 
+     xyz_point_ant, xyz_color, pcd = self.reduccion_nube(pcl_total,vx_m)
+     t_vx = time.time() - t_vx_ini
+     size_red = len(xyz_point_ant)
+        
+     '''guardar PCL'''
+     t_gb_ini = time.time()
+     o3d.io.write_point_cloud("/home/mab/datos_pcl/datos/cloud/cloud_reconstruccion_total"+str(cont)+".ply",pcd)  
+     t_gb = time.time() - t_gb_ini
+        
+     '''proyectar reconstruccion'''
+     t_dp_ini = time.time()
+     pc_rec = self.procesamiento_depth(xyz_point_ant , xyz_color)
+     self.pub_rec.publish(pc_rec)
+     t_dp = time.time() - t_dp_ini 
+     
+     tiempo_final = time.time()
+     resta_time = tiempo_final-tiempo_inicial
+     pos=""
+     for dat in [resta_time,t_pre,t_uni,t_vx,t_gb,t_dp,m_xyz_in,size_ant,size_uni,size_red]:
+        pos = pos+str(dat)+" "
+     tiempo_inicial = tiempo_final
+     gdi.guardar_tiempos_reconstruccion_two(pos,cont)
+     cont += 1 
+
+  def reduccion_nube(self, total, vx_m): 
+      pcd = o3d.geometry.PointCloud()
+      pcd.points = o3d.utility.Vector3dVector(total)
+      pcd_down = o3d.voxel_down_sample(pcd, voxel_size=vx_m)
+      xyz1 = np.asarray(pcd_down.points) 
+      color = np.asarray(pcd_down.colors)       
+      return(xyz1, color, pcd_down) 
+
+  def unir_pcd(self, xyz1, negativo_xyz, a, b):
+      if len(xyz1) > 0 and len(negativo_xyz) > 0:
+         total = np.concatenate((xyz1, negativo_xyz), axis=0) 
+      elif len(xyz1) == 0 :
+         total = negativo_xyz
+      elif len(negativo_xyz) == 0:
+         total = xyz1
+      return(total) 
+      
+  def procesamiento_depth(self, pcl_total, pcl_total_rgb):
+     points = []
+     for i in range(len(pcl_total)):
+            x = pcl_total[i][0]
+            y = pcl_total[i][1]
+            z = pcl_total[i][2]
+            r = 0
+            g = 255
+            b = 0
+            a = 255
+            rgb = struct.unpack('I', struct.pack('BBBB', r, g, b, a))[0]
+            pt = [x, y, z, rgb]
+            points.append(pt)
+     fields = [PointField('x', 0, PointField.FLOAT32, 1),
+          PointField('y', 4, PointField.FLOAT32, 1),
+          PointField('z', 8, PointField.FLOAT32, 1),
+          PointField('rgba', 12, PointField.UINT32, 1),
+          ]
+     header = Header()
+     header.frame_id = "map"
+     pc2 = pc.create_cloud(header, fields, points)
+     pc2.header.stamp = rospy.Time.now()
+     return(pc2)  
+     
+#programa principal
+
+if __name__=='__main__':
+    rospy.init_node('nodo_reconstruction')#crea el nodo 'pre_procesamiento' donde se ejecuta el codigo, y este queda anclado a rosmaster con este nombre 
+    instancia_reconstruccion = RECONSTRUCCION()#crea una instancia de la clase PRE_PROCESAMIENTO
+    rospy.loginfo("inicio de nodo_reconstruction")#mensajen en ROS de inicio del nodo 
+    rospy.spin()#averiguar que es spin y como afecta 
+
+

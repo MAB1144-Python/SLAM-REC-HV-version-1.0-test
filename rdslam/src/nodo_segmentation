@@ -1,0 +1,288 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import roslib
+import rospy
+import math
+import sys
+import cv2
+import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
+import time
+import os
+import ros_numpy
+import open3d as o3d
+import struct
+import time
+import guardar_info as gdi
+import pandas as pd
+from sensor_msgs import point_cloud2 as pc
+from sensor_msgs.msg import PointCloud2, PointField
+from email.header import Header
+
+xyz_point_ant = np.zeros((1,3), dtype=object)
+cont = 1
+tiempo_inicial = 0
+tope = 5
+xt = 0
+yt = 0
+zt = 0
+size_xzy = 0
+data_orb = [0,0,0,0,0,0]
+xeje = 400
+yeje = 500
+#km = MiniBatchKMeans(init="k-means++",n_clusters=3, n_init=10, batch_size=100, max_no_improvement=10, verbose=0, max_iter=10)
+segmenta=False #True con las dos segmentaciones False con la segmentacion 1
+
+class RECONSTRUCCION(object):  
+
+  def __init__(self):#función inicial cada vez que corre el sistema y se ncarga de tomar los mensajes que vienen desde los sensores
+     self.pub_rec = rospy.Publisher("/point_cloud_segmentacion", PointCloud2, queue_size=8)
+     self.pub_din = rospy.Publisher("/point_cloud_din", PointCloud2, queue_size=6)
+     #/point_cloud_reconstruccion_time"
+     self.sub_kin = rospy.Subscriber("point_cloud_reduced" , PointCloud2, self.ptcloud2)
+
+  def ptcloud2(self, msg):  
+     global xyz_point_ant
+     global cont
+     global tiempo_inicial
+     global tope
+     global xt
+     global yt
+     global zt
+     global xeje
+     '''reconstrucción ''' 
+     '''preparacion de los datos'''
+     t_pre_ini = time.time() 
+     negativo_xyz = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg)
+     max_z,min_z,vx_m =negativo_xyz[-3]#recupera coeficientes
+     data_orb[0],data_orb[1],data_orb[2] = 0,0,0#negativo_xyz[-2]#recupera orb traslacilon
+     data_orb[3],data_orb[4],data_orb[5] = 0,0,0#negativo_xyz[-1]#recupera rotacion
+     negativo_xyz =negativo_xyz[:-3,0:3]#quita los ultimos 3 datos que son informacion
+     zona = [max_z,min_z,0,0]
+     evento="estatico"
+     if True:#zona[0] != 90 and zona[1] !=0:# aqui se hizo el cambio para que tome solo las pcl total
+        m_xyz_in = len(negativo_xyz)
+        t_pre = time.time() - t_pre_ini
+        
+        '''segmentacion y eliminacion'''
+        a = time.time() 
+        corte_xyz, negativo_xyz,evento, pos_xyz, size_pcl = self.recortar( negativo_xyz,zona,cont,vx_m,data_orb)
+        print("PCL recortar  ",len(corte_xyz), len(negativo_xyz),evento)
+        t_rec = time.time()-a
+        
+        '''union de pcl'''
+        t_uni_ini = time.time()
+        size_ant = len(xyz_point_ant)
+        pcl_total = self.unir_pcd(xyz_point_ant , negativo_xyz, 0, 1)
+        size_uni = len(pcl_total)
+        print("--------union PCL ",size_uni)
+        t_uni = time.time() - t_uni_ini
+        
+        '''reduccion'''
+        t_vx_ini = time.time() 
+        xyz_point_ant, xyz_color, pcd = self.reduccion_nube(pcl_total,vx_m)
+        t_vx = time.time() - t_vx_ini
+        size_red = len(xyz_point_ant)
+        print("--------reduccion ",len(xyz_point_ant))
+        
+        '''guardar PCL'''
+        t_gb_ini = time.time()
+        #o3d.io.write_point_cloud("/home/mab/datos_pcl/datos/cloud/cloud_reconstruccion"+str(cont)+".ply",pcd)  
+        t_gb = time.time() - t_gb_ini
+        
+        '''proyectar reconstruccion'''
+        t_dp_ini = time.time()
+        pc_rec = self.procesamiento_depth(negativo_xyz , xyz_color)
+        self.pub_rec.publish(pc_rec)
+        t_dp = time.time() - t_dp_ini
+        
+        '''proyectar objeto dinamico'''
+        t_pc2_ini = time.time()  
+        try:
+          pc_din = self.procesamiento_depth_din(corte_xyz)
+          self.pub_din.publish(pc_din)
+        except: 
+          pc_din = self.procesamiento_depth([[0,0,0]] , [[255,0,0]])
+          self.pub_din.publish(pc_din)
+        
+        t_pc2 = time.time() - t_pc2_ini  
+        if True:
+             pcd = o3d.geometry.PointCloud()
+             try:
+                pcd.points =  o3d.utility.Vector3dVector(corte_xyz)
+                pcd.paint_uniform_color([0.3, 0.651, 0.3]) # blue
+                o3d.io.write_point_cloud("/home/mab/datos_pcl/datos/cloud/cloud_dinamico_"+str(cont)+".ply",pcd)
+             except: 
+                pcd.points =  o3d.utility.Vector3dVector([[0,0,0]])
+                pcd.paint_uniform_color([0.3, 0.651, 0.3]) # blue
+                o3d.io.write_point_cloud("/home/mab/datos_pcl/datos/cloud/cloud_dinamico_"+str(cont)+".ply",pcd)
+             try:
+                pcd.points =  o3d.utility.Vector3dVector(negativo_xyz)
+                pcd.paint_uniform_color([0, 0.651, 0.929]) # blue
+                o3d.io.write_point_cloud("/home/mab/datos_pcl/datos/cloud/cloud_estatico_"+str(cont)+".ply",pcd)
+             except: 
+                pcd.points =  o3d.utility.Vector3dVector([[0,0,0]])
+                pcd.paint_uniform_color([0, 0.651, 0.929]) # blue
+                o3d.io.write_point_cloud("/home/mab/datos_pcl/datos/cloud/cloud_estatico_"+str(cont)+".ply",pcd) 
+     else:
+        cont += 1 
+        t_vx =0
+        t_gb = 0
+        t_pre = 0
+        t_dp = 0
+        t_rec = 0
+        t_uni = 0
+        t_pc2 = 0
+        m_xyz_in = 0
+        m_din = 0
+        m_est_seg = 0
+        size_ant = 0
+        size_uni = 0
+        size_red = 0
+        pos_xyz[0,0,0]
+
+     tiempo_final = time.time()
+     resta_time = tiempo_final-tiempo_inicial
+     pos=""
+     for dat in [evento,resta_time,t_pre,t_rec,t_uni,t_vx,t_gb,t_dp,t_pc2,m_xyz_in,size_pcl[0],size_pcl[1],size_pcl[2],size_pcl[3],size_ant,size_uni,size_red, vx_m, pos_xyz[0], pos_xyz[1], pos_xyz[2]]:
+        pos = pos+str(dat)+" "
+     tiempo_inicial = tiempo_final
+     gdi.guardar_tiempos_reconstruccion(pos,cont)
+     cont += 1 
+
+  def euler_to_rotMat(self, yaw, pitch, roll):
+    #rotación en Z
+    Rz_yaw =   np.array([[np.cos(yaw), -np.sin(yaw), 0],
+                         [np.sin(yaw),  np.cos(yaw), 0],
+                         [0          ,            0, 1]])
+    #rotación en Y
+    Ry_pitch = np.array([[ np.cos(pitch),  0,  np.sin(pitch)],
+                         [0             ,  1,              0],
+                         [-np.sin(pitch),  0, np.cos(pitch)]])
+    #rotación X
+    Rx_roll =  np.array([[1,            0,             0],
+                         [0, np.cos(roll), -np.sin(roll)],
+                         [0, np.sin(roll),  np.cos(roll)]])
+    #Matriz de rotación
+    rotMat = np.dot( np.dot(Rx_roll, Ry_pitch), Rz_yaw)
+    return rotMat     
+
+  def rot_tras(self, pcl_total):
+     global data_orb
+     pt = []
+     Rmat = self.euler_to_rotMat( data_orb[5], data_orb[4], data_orb[3])
+     for i in range(len(pcl_total)):
+            x = pcl_total[i][0]
+            y = pcl_total[i][1]
+            z = pcl_total[i][2]
+            x,y,z = np.dot(Rmat,[x,y,z])
+            x = x+data_orb[0]
+            y = y-data_orb[1]
+            z = z+data_orb[2]
+            pt.append([x, y, z])
+     return(pt)   
+
+  def recortar(self, xyz,zona,conteo,vx_m,ORB):
+    global xt
+    global yt
+    global zt
+    global vect_per
+    global cont_cero
+    global segmenta #True con las dos segmentaciones False con la segmentacion 1
+    corte_xyz = []
+    negativo = []
+    vect = []
+    resultado = np.zeros((10,int(xeje),3), np.uint8)
+    tm = 10
+    Rmat = self.euler_to_rotMat( ORB[5], ORB[4], ORB[3])
+    if zona[1] != 0.8028517365455627 and zona[0] !=2.373647928237915:#(zona[0] != 0.8028517365455627 or zona[1] !=2.373647928237915) and (zona[1] != 0.8028517365455627 and zona[0] !=2.373647928237915):
+       for elem in xyz:
+         x,y,z = elem
+         r=np.sqrt((x**2)+(y**2))#(z**2)+
+         alf = math.acos(y/r)
+         if alf>zona[0] or alf<zona[1]:  #and alf!=0:#or alf<ang_min
+             x,y,z = np.dot(Rmat,[x,y,z])
+             negativo.append([x+ORB[0],y-ORB[1],z+ORB[2]]) #x-yt
+         else:
+             x,y,z = np.dot(Rmat,[x,y,z])
+             corte_xyz.append([x+ORB[0],y-ORB[1],z+ORB[2]])  
+       size_pcl = [len(negativo),len(corte_xyz),0,0]        
+       return(np.asarray(corte_xyz), np.asarray(negativo),"dinamico",[0,0,0],size_pcl) 
+    print("default")
+    xyz, self.rot_tras(xyz)
+    return([0,0,0], np.asarray(xyz),"estatico",[0,0,0],[0,0,0,0]) 
+       
+  def reduccion_nube(self, total, vx_m): 
+      pcd = o3d.geometry.PointCloud()
+      pcd.points = o3d.utility.Vector3dVector(total)
+      pcd_down = o3d.voxel_down_sample(pcd, voxel_size=vx_m)
+      xyz1 = np.asarray(pcd_down.points) 
+      color = np.asarray(pcd_down.colors)       
+      return(xyz1, color, pcd_down) 
+
+  def unir_pcd(self, xyz1, negativo_xyz, a, b):
+      if len(xyz1) > 0 and len(negativo_xyz) > 0:
+         total = np.concatenate((xyz1, negativo_xyz), axis=0) 
+      elif len(xyz1) == 0 :
+         total = negativo_xyz
+      elif len(negativo_xyz) == 0:
+         total = xyz1
+      return(total) 
+      
+  def procesamiento_depth(self, pcl_total, pcl_total_rgb):
+     points = []
+     for i in range(len(pcl_total)):
+            x = pcl_total[i][0]
+            y = pcl_total[i][1]
+            z = pcl_total[i][2]
+            r = 0
+            g = 255
+            b = 0
+            a = 255
+            rgb = struct.unpack('I', struct.pack('BBBB', r, g, b, a))[0]
+            pt = [x, y, z, rgb]
+            points.append(pt)
+     fields = [PointField('x', 0, PointField.FLOAT32, 1),
+          PointField('y', 4, PointField.FLOAT32, 1),
+          PointField('z', 8, PointField.FLOAT32, 1),
+          PointField('rgba', 12, PointField.UINT32, 1),
+          ]
+     header = Header()
+     header.frame_id = "map"
+     pc2 = pc.create_cloud(header, fields, points)
+     pc2.header.stamp = rospy.Time.now()
+     return(pc2)  
+      
+  def procesamiento_depth_din(self, pcl_total):
+     points = []
+     for i in range(len(pcl_total)):
+            x = pcl_total[i][0]
+            y = pcl_total[i][1]
+            z = pcl_total[i][2]
+            r = 0
+            g = 0
+            b = 255
+            a = 255
+            rgb = struct.unpack('I', struct.pack('BBBB', r, g, b, a))[0]
+            pt = [x, y, z, rgb]
+            points.append(pt)
+     fields = [PointField('x', 0, PointField.FLOAT32, 1),
+          PointField('y', 4, PointField.FLOAT32, 1),
+          PointField('z', 8, PointField.FLOAT32, 1),
+          PointField('rgba', 12, PointField.UINT32, 1),
+          ]
+     header = Header()
+     header.frame_id = "map"
+     pc2 = pc.create_cloud(header, fields, points)
+     pc2.header.stamp = rospy.Time.now()
+     return(pc2)   
+     
+#programa principal
+
+if __name__=='__main__':
+    rospy.init_node('nodo_segmentation')#crea el nodo 'pre_procesamiento' donde se ejecuta el codigo, y este queda anclado a rosmaster con este nombre 
+    instancia_reconstruccion = RECONSTRUCCION()#crea una instancia de la clase PRE_PROCESAMIENTO
+    rospy.loginfo("inicio de nodo_segmentation")#mensajen en ROS de inicio del nodo 
+    rospy.spin()#averiguar que es spin y como afecta 
+
+

@@ -1,0 +1,12 @@
+<launch>
+    <include file="$(find rdslam)/launch/orb_slam2_tum2_rgbd.launch" />
+    <include file="$(find rdslam)/launch/mpu_orb.launch" />
+    <include file="$(find rplidar_ros)/launch/rplidar.launch" />
+    <include file="$(find openni_launch)/launch/openni.launch" />
+    <include file="$(find rdslam)/launch/segmentation.launch" />
+    <include file="$(find rdslam)/launch/reconstruction.launch" />
+    <node name="rviz" pkg="rviz" type="rviz" respawn="false" args="-d $(find rdslam)/launch/Rec_HV_SLAM_visual.rviz" />
+    <!-- My Package launch file -->
+    <node pkg="rdslam" type="nodo_deteccion" name="nodo_deteccion" output="screen">
+    </node>
+</launch>
