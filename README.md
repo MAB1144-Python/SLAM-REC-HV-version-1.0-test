@@ -13,6 +13,14 @@
 
 #### To encourage the staggered development of this technology, researchers are encouraged to leave their opinions, doubts and contributions, in order to create spaces for the appropriation of this technology and strengthen SLAM research.
 
+#### The respective code is in the rdslam folder, in this repository.
+
+https://github.com/MAB1144-Python/SLAM-REC-HV-version-1.0-test/tree/main/rdslam
+
+#### Installation guide for Rec-HV
+
+https://github.com/MAB1144-Python/SLAM-REC-HV-version-1.0-test/blob/main/installation_guide
+
 ### Control Scenario detection test.
 
 #### The control scenario is made up of elements with materials that are easy to capture with the sensors. In the test, there was a robotic vehicle, which carried out the routes at a speed of 2.78m/s.
