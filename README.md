@@ -19,7 +19,7 @@ https://github.com/MAB1144-Python/SLAM-REC-HV-version-1.0-test/tree/main/rdslam
 
 #### Installation guide for Rec-HV
 
-https://github.com/MAB1144-Python/SLAM-REC-HV-version-1.0-test/blob/main/installation_guide
+https://github.com/MAB1144-Python/Installation_guide
 
 ### Control Scenario detection test.
 
